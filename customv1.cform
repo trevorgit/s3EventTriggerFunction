@@ -1,0 +1,124 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "S3bucketName": {
+      "Description": "Name of the S3 bucket",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "CustomResourceHelperRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Path": "/MediaSharingRefarch/",
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*",
+                  "Sid": "AllowLogging"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "LambdaWriteCWLogs"
+          },
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:PutBucketNotification"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::${S3bucketName}"
+                  },
+                  "Sid": "PutS3EventNofication"
+                },
+                {
+                  "Action": [
+                    "lambda:AddPermission"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*",
+                  "Sid": "AddPermissionToLambda"
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "AddS3EventTrigger"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "CreateS3EventTriggerFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomResourceHelperRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "S3Bucket": "trevorshare",
+          "S3Key": "EventTrigger.zip"
+        },
+        "Runtime": "nodejs4.3",
+        "Timeout": "25"
+      }
+    },
+    "S3EventTrigger": {
+      "Properties": {
+        "S3Bucket": {
+          "Ref": "S3bucketName"
+        },
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CreateS3EventTriggerFunction",
+            "Arn"
+          ]
+        },
+        "StartExecutionFunction": {
+          "Ref": "CreateS3EventTriggerFunction"
+        },
+        "StartExecutionFunctionArn": {
+          "Fn::GetAtt": [
+            "CreateS3EventTriggerFunction",
+            "Arn"
+          ]
+        },
+        "accountId": {
+          "Ref": "AWS::AccountId"
+        }
+      },
+      "Type": "Custom::S3EventTrigger",
+      "Version": "1.0"
+    }
+  }
+}
